@@ -1,6 +1,6 @@
 # DevSecOps pipeline workflow
 
-![alt text](vimages/DevSecOps_CI_CD.drawio.png)
+![alt text](images/DevSecOps_CI_CD.drawio.png)
 
 
 + Code Analysis (SAST): quét bảo mật source code, phân tích source code có đảm bảo clean hay không, có chỗ nào hard code, hay dùng hàm biến chưa phù hợp hay không. Chính xác đây là đánh giá ở phần source code hay đơn giản là dev code xong sẽ lém vào trong một công nghệ nào đó và công nghệ đó sẽ phần tích mã code đưa ra các kết quả để xem code đó có đủ đáp ứng yêu cầu để tiếp tục các bước tiếp theo hay không ==> Phần tích mã nguồn (Ví dụ: `sonarqube`)
