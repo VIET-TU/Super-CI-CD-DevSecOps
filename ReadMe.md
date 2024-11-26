@@ -1,6 +1,6 @@
 # DevSecOps pipeline workflow
 
-![alt text](vimages/DevSecOps_CI_CD.drawio.png)
+![alt text](images/DevSecOps_CI_CD.drawio.png)
 
 [link demo][https://drive.google.com/drive/folders/1kLihfTtxMn07BkSZTFC98Vf3l6DfmGM4?usp=sharing]
 
