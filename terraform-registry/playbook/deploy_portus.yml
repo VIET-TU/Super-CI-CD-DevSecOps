@@ -1,0 +1,105 @@
+---
+- name: Deploy Portus with Docker and SSL
+  hosts: all
+  become: yes
+
+  vars:
+    domain_name: "portus.viettu.id.vn"
+    email: "ll6012065@gmail.com"
+    install_dir: "/tools/portus"
+    secrets_dir: "{{ install_dir }}/compose/secrets"
+
+  tasks:
+    - name: Update apt packages
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - git
+          - net-tools
+          - certbot
+        state: latest
+
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create Portus installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Clone Portus repository
+      git:
+        repo: "https://github.com/SUSE/Portus.git"
+        dest: "{{ install_dir }}/Portus"
+
+    - name: Move example compose files to the target directory
+      command:
+        cmd: mv {{ install_dir }}/Portus/examples/compose {{ install_dir }}
+
+    - name: Remove Portus repository
+      file:
+        path: "{{ install_dir }}/Portus"
+        state: absent
+
+
+
+    - name: Obtain SSL certificate 
+      command: >
+        certbot certonly --standalone 
+        -d {{ domain_name }} 
+        --preferred-challenges http 
+        --agree-tos 
+        -m {{ email }} 
+        --keep-until-expiring 
+
+    - name: Copy SSL certificate to secrets directory
+      become: yes
+      copy:
+        src: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+        dest: "{{ secrets_dir }}/portus.crt"
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy SSL key to secrets directory
+      become: yes
+      copy:
+        src: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
+        dest: "{{ secrets_dir }}/portus.key"
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Update nginx.conf to comment out "ssl on;"
+      lineinfile:
+        path: "{{ install_dir }}/compose/nginx/nginx.conf"
+        regexp: '^\s*ssl\s+on;'
+        line: '# ssl on;'
+        state: present
+
+    - name: Update .env file with domain name
+      lineinfile:
+        path: "{{ install_dir }}/compose/.env"
+        regexp: '^MACHINE_FQDN=.*'
+        line: "MACHINE_FQDN={{ domain_name }}"
+        create: yes
+
+    - name: Start Portus using Docker Compose
+      command: docker-compose -f docker-compose.clair-ssl.yml up -d
+      args:
+        chdir: "{{ install_dir }}/compose"
+
+
+

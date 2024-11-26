@@ -1,0 +1,31 @@
+namespace: online-shop
+replicas: 2
+labels: online-shop-bacend
+
+image: viettu123/online-shop-backend:pipeline-be-4_v11_eb9162a7 
+
+container:
+  Port: 5214
+
+service:
+  Port: 31000
+
+configMap:
+  name: online-shop-backend-application-properties-configmap
+
+volumes:
+  name: ecommerce-backend-application-properties-config-volume
+
+volumeMounts:
+  mountPath: /app/appsettings.json
+  subPath: appsettings.json
+
+
+secrets:
+  name: online-shop-backend-database-connection
+  database:
+    host: "192.168.254.201"
+    name: "OnlineShopdb"
+    port: "1433"
+    username: "sa"
+    password: "Str0ngPa5sVvorcl"

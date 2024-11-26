@@ -1,0 +1,234 @@
+variables:
+  IMAGE_VERSION: "${CI_REGISTRY}/${USER_PROJECT}/${CI_PROJECT_NAME}:${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
+  REPORT_DIR: "/reports/${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
+  SNYKSCAN_REPORT: "snyk_scan_${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}_report"
+  TRIVYFS_REPORT: "trivyfs_scan_${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}_report"
+  TRIVY_IMAGE_REPORT: "security_scan_image_${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}_report"
+
+
+stages:
+  - test source code
+  - build
+  - security scan image
+  - push
+  - deploy
+  - send report
+  - clean up
+
+
+sonarqube-check:
+  stage: test source code
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+    GIT_STRATEGY: clone
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - |
+      docker run --rm -v "$PWD:/workspace" -w /workspace -e SONAR_HOST_URL=$SONAR_HOST_URL mcr.microsoft.com/dotnet/sdk:7.0 sh -c "
+        dotnet tool install --global dotnet-sonarscanner && \
+        export PATH=\$PATH:\$HOME/.dotnet/tools && \
+        dotnet sonarscanner begin /k:'$CI_PROJECT_NAME' /d:sonar.token='$SONAR_TOKEN'  /d:sonar.host.url='$SONAR_HOST_URL' /d:sonar.scanner.scanAll=false && \
+        dotnet build && \
+        dotnet sonarscanner end /d:sonar.token='$SONAR_TOKEN' && \
+        rm -rf .sonarqube bin obj
+      "
+    - curl -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/issues/gitlab_sast_export?projectKey=${CI_PROJECT_NAME}&branch=${CI_COMMIT_BRANCH}&pullRequest=${CI_MERGE_REQUEST_IID}" -o gl-sast-sonar-report.json
+  after_script:
+    - sudo chown -R  $(id -u):$(id -g) $CI_PROJECT_DIR 
+  artifacts:
+    expire_in: 1 day
+    reports:
+      sast: gl-sast-sonar-report.json
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+
+trivyfs scan:
+  stage: test source code
+  variables:
+    GIT_STRATEGY: clone
+  before_script:
+    - if [ ! -d "$REPORT_DIR" ]; then  sudo mkdir -p "$REPORT_DIR"; sudo chown -R gitlab-runner "$REPORT_DIR"; fi
+    - echo $GITHUB_TOKEN | docker login $GITHUB_REGISTRY -u $GITHUB_USERNAME --password-stdin
+  script:
+    - docker run --rm -v $PWD:/${CI_PROJECT_NAME} -v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.cache/trivy:/root/.cache/trivy aquasec/trivy fs /${CI_PROJECT_NAME} --severity HIGH,CRITICAL --format template --template "@contrib/html.tpl" --output /${CI_PROJECT_NAME}/$TRIVYFS_REPORT.html --timeout 10m 
+    - cp $TRIVYFS_REPORT.html $REPORT_DIR/$TRIVYFS_REPORT.html
+  allow_failure: true
+  retry: 2
+  after_script:
+    - sudo chown -R  $(id -u):$(id -g) $CI_PROJECT_DIR
+    - docker logout $GITHUB_REGISTRY
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+  artifacts:
+    paths:
+      - $TRIVYFS_REPORT.html
+    expire_in: 1 day
+
+snyk scan:
+  stage: test source code
+  variables:
+    GIT_STRATEGY: clone
+  before_script:
+    - if [ ! -d "$REPORT_DIR" ]; then  sudo mkdir -p "$REPORT_DIR"; sudo chown -R gitlab-runner "$REPORT_DIR"; fi
+  script:
+    - docker run --rm -e SNYK_AUTH_TOKEN=$SNYK_TOKEN  -e OUTPUT_FILENAME=$SNYKSCAN_REPORT  -v $(pwd):/app -w /app node:18-alpine sh -c " npm install -g snyk snyk-to-html &&  snyk auth \$SNYK_AUTH_TOKEN &&  snyk test --json | snyk-to-html -o /app/\$OUTPUT_FILENAME.html || true && chown node:node /app/\$OUTPUT_FILENAME.html"
+    - cp ${SNYKSCAN_REPORT}.html $REPORT_DIR/$SNYKSCAN_REPORT.html
+  allow_failure: true
+  after_script:
+    - sudo chown -R  $(id -u):$(id -g) $CI_PROJECT_DIR
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+  artifacts:
+    paths:
+      - $SNYKSCAN_REPORT.html
+    expire_in: 1 day
+  
+
+build:
+  stage: build
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - docker build -t $IMAGE_VERSION .
+  cache:
+    key: "$CI_COMMIT_REF_NAME"
+    paths:
+      - ~/.nuget/packages
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+
+trivy scan image:
+  stage: security scan image
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - echo $GITHUB_TOKEN | docker login $GITHUB_REGISTRY -u $GITHUB_USERNAME --password-stdin
+  script:
+    - docker run --rm -v $(pwd):/${CI_PROJECT_NAME} -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy clean --all
+    - docker run --rm -v $(pwd):/${CI_PROJECT_NAME} -v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.cache/trivy:/root/.cache/trivy aquasec/trivy image --format template --template "@contrib/html.tpl" --output /${CI_PROJECT_NAME}/${TRIVY_IMAGE_REPORT}.html $IMAGE_VERSION --timeout 10m 
+    - cp $TRIVY_IMAGE_REPORT.html $REPORT_DIR/$TRIVY_IMAGE_REPORT.html
+  after_script:
+    - sudo chown -R  $(id -u):$(id -g) $CI_PROJECT_DIR
+    - docker logout $GITHUB_REGISTRY
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+  artifacts:
+    paths:
+      - $TRIVY_IMAGE_REPORT.html
+    expire_in: 1 day
+
+push:
+  stage: push
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker  push $IMAGE_VERSION
+  after_script:
+    - docker logout $CI_REGISTRY
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+
+
+
+deploy:
+  stage: deploy
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker pull $IMAGE_VERSION
+    - sudo su ${USER_PROJECT} -c "docker service rm  $CI_PROJECT_NAME; docker service create --replicas $REPLICAS -p $BE_PORT --name $CI_PROJECT_NAME  $IMAGE_VERSION"
+  after_script:
+    - docker logout $CI_REGISTRY
+  tags:
+    - online-shop-runner-dev-shell
+    
+  only:
+    - tags
+
+send report:
+  stage: send report
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - |
+      curl -F "chat_id=-4288739311" \
+      -F 'media=[{"type": "document", "media": "attach://file1"}, {"type": "document", "media": "attach://file2"}, {"type": "document", "media": "attach://file3"}]' \
+      -F "file1=@${REPORT_DIR}/${TRIVY_IMAGE_REPORT}.html" \
+      -F "file2=@${REPORT_DIR}/${SNYKSCAN_REPORT}.html" \
+      -F "file3=@${REPORT_DIR}/${TRIVYFS_REPORT}.html" \
+      "https://api.telegram.org/${BOT_ID}:${BOT_TOKEN}/sendMediaGroup"
+  tags:
+    - online-shop-runner-build-shell
+  only:
+    - tags
+
+clean-up:
+  stage: clean up
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - |
+      cat << 'EOF' > clean_up.yml
+      ---
+      - name: Clean up Docker images and containers
+        hosts: all
+        become: yes
+        tasks:
+          - name: Create cleanup script on remote server
+            copy:
+              content: |
+                #!/bin/bash
+                docker container prune -f
+                deleted_images=$(docker images {{ lookup('env', 'IMAGE_CLEAN') }}_* --format '{{ "{{" }}.Repository{{ "}}" }}:{{ "{{" }}.Tag{{ "}}" }} {{ "{{" }}.CreatedAt{{ "}}" }}' | sort -k 2 -r | awk 'NR>2{print $1}' | xargs -r docker rmi)
+                if [ -n "$deleted_images" ]; then
+                  echo "Deleted images:"
+                  echo "$deleted_images"
+                else
+                  echo "No images were deleted."
+                fi
+                docker container prune -f
+                rm -rf /home/gitlab-runner/builds
+                echo "clean up done."
+              dest: ~/checkImages.sh
+              mode: '0755'
+          - name: Execute the cleanup script
+            command: ~/checkImages.sh
+            register: cleanup_output 
+          - name: Show cleanup script output
+            debug:
+              var: cleanup_output.stdout_lines
+          - name: Remove the cleanup script
+            file:
+              path: ~/checkImages.sh
+              state: absent
+      EOF
+    - echo "[all]" > inventory; i=1; for ip in $SERVER_IPS; do echo "server_$i ansible_host=$ip" >> inventory; i=$((i+1)); done
+    - export IMAGE_CLEAN=$(echo "$IMAGE_VERSION" | cut -d'_' -f1)
+    - ansible-playbook -i inventory clean_up.yml -u root --extra-vars "IMAGE_CLEAN=${IMAGE_CLEAN}"
+  tags:
+    - online-shop-runner-cleanup-shell
+  only:
+    - tags
+
+
+
