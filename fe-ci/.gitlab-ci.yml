@@ -272,19 +272,3 @@ clean-up:
   only:
     - tags
 
-deploy-product:
-  stage: product
-  variables:
-    GIT_STRATEGY: none
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
-  script:
-    - docker pull $IMAGE_VERSION
-    - sudo su ${USER_PROJECT} -c "docker service rm  $CI_PROJECT_NAME || true; docker service create --replicas $REPLICAS -p $FE_PORT --name $CI_PROJECT_NAME  $IMAGE_VERSION"
-  after_script:
-    - docker logout $CI_REGISTRY
-  tags:
-    - online-shop-runner-dev-sh ell
-    
-  only:
-    - tags
