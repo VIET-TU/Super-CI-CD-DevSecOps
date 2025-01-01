@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sqlserver
+spec:
+  serviceName: sqlserver
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sqlserver
+  template:
+    metadata:
+      labels:
+        app: sqlserver
+    spec:
+      containers:
+      - name: sqlserver
+        image: sqlserver:14
+        env:
+        - name: "ACCEPT_EULA"
+          value: "Y"
+        - name: SA_PASSWORD
+          value: "Str0ngPa5sVvorcl"
+        ports:
+        - containerPort: 1433
+          name: sqlserver
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sqlserver
+spec:
+  clusterIP: None
+  selector:
+    app: sqlserver
+  ports:
+    - port: 1433
+      name: sqlserver

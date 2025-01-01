@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  ports:
+    - name: tcp
+      port: {{ .Values.container.Port }}
+      protocol: TCP
+      targetPort: {{ .Values.container.Port }}
+  selector: {{ include "common.labels" . | nindent 6 }}
+  sessionAffinity: None
+  type: ClusterIP
+  

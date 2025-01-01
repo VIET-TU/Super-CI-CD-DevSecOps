@@ -1,0 +1,10 @@
+namespace: online-shop
+replicas: 2
+labels: online-shop-frontend
+
+image: viettu123/online-shop-backend:pipeline-fe-eks_v1_et7625c2 
+
+container:
+  Port: 3000
+
+BackEnd_URL: "backend.default.svc.cluster.local"

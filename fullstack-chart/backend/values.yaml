@@ -1,8 +1,8 @@
 namespace: online-shop
 replicas: 2
-labels: online-shop-bacend
+labels: online-shop-backkend
 
-image: viettu123/online-shop-backend:pipeline-be-4_v11_eb9162a7 
+image: viettu123/online-shop-backend:pipeline-be-eks_v1_eb4252a4 
 
 container:
   Port: 5214
@@ -24,7 +24,7 @@ volumeMounts:
 secrets:
   name: online-shop-backend-database-connection
   database:
-    host: "192.168.254.201"
+    host: "sqlserver-0.sqlserver.default.svc.cluster.local"
     name: "OnlineShopdb"
     port: "1433"
     username: "sa"

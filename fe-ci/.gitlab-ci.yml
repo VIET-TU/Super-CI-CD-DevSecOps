@@ -146,7 +146,7 @@ push:
   only:
     - tags
 
-deploy-pre-product:
+deploy:
   stage: deploy
   variables:
     GIT_STRATEGY: none
@@ -269,22 +269,5 @@ clean-up:
     - ansible-playbook -i inventory clean_up.yml -u root --extra-vars "IMAGE_CLEAN=${IMAGE_CLEAN}"
   tags:
     - online-shop-runner-cleanup-shell
-  only:
-    - tags
-
-deploy-product:
-  stage: product
-  variables:
-    GIT_STRATEGY: none
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
-  script:
-    - docker pull $IMAGE_VERSION
-    - sudo su ${USER_PROJECT} -c "docker service rm  $CI_PROJECT_NAME || true; docker service create --replicas $REPLICAS -p $FE_PORT --name $CI_PROJECT_NAME  $IMAGE_VERSION"
-  after_script:
-    - docker logout $CI_REGISTRY
-  tags:
-    - online-shop-runner-dev-sh ell
-    
   only:
     - tags
