@@ -1,8 +1,9 @@
 # DevSecOps pipeline workflow
 
+[link demo][https://drive.google.com/drive/folders/1kLihfTtxMn07BkSZTFC98Vf3l6DfmGM4?usp=sharing]
+
 ![alt text](images/DevSecOps_CI_CD.drawio.png)
 
-[link demo][https://drive.google.com/drive/folders/1kLihfTtxMn07BkSZTFC98Vf3l6DfmGM4?usp=sharing]
 
 + Code Analysis (SAST): quét bảo mật source code, phân tích source code có đảm bảo clean hay không, có chỗ nào hard code, hay dùng hàm biến chưa phù hợp hay không. Chính xác đây là đánh giá ở phần source code hay đơn giản là dev code xong sẽ lém vào trong một công nghệ nào đó và công nghệ đó sẽ phần tích mã code đưa ra các kết quả để xem code đó có đủ đáp ứng yêu cầu để tiếp tục các bước tiếp theo hay không ==> Phần tích mã nguồn (Ví dụ: `sonarqube`)
 + Composition analysis (SCA): phân tích thành phần phần mềm, kiểm tra và đánh giá các thành phần của phần mềm bao gồm: thư viện, framework, và các module của phần mềm. Mục tiêu sẽ là phát hiện ra các vấn đề bảo mật, xem đã tuân thủ các giấy phép và các rủi ro khác liên quan đến các thành phần bên thứ 3 hay chưa (VD: `Synk`) 
